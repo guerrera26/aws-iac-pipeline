@@ -1,0 +1,4 @@
+aws_region     = "us-east-1"
+project_name   = "aws-devops-project"
+ssh_public_key = "ssh-ed25519 AAAA... your-key-here"
+my_ip          = "REPLACE_WITH_YOUR_IP/32"

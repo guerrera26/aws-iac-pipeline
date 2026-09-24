@@ -1,0 +1,25 @@
+---
+- name: Configure web server on EC2 instance
+  hosts: web
+  become: true
+
+  vars:
+    project_name: "AWS DevOps Project"
+
+  tasks:
+    - name: Install nginx
+      dnf:
+        name: nginx
+        state: present
+
+    - name: Deploy index page from template
+      template:
+        src: templates/index.html.j2
+        dest: /usr/share/nginx/html/index.html
+        mode: "0644"
+
+    - name: Start and enable nginx
+      systemd:
+        name: nginx
+        state: started
+        enabled: true
