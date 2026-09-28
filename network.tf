@@ -81,3 +81,51 @@ resource "aws_security_group" "web" {
     Name = "${var.project_name}-sg"
   }
 }
+
+# Second subnet in a different AZ — RDS requires a subnet group spanning
+# at least two AZs, even for a single-AZ database instance.
+resource "aws_subnet" "db" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = data.aws_availability_zones.available.names[1]
+
+  tags = {
+    Name = "${var.project_name}-db-subnet"
+  }
+}
+
+resource "aws_db_subnet_group" "main" {
+  name       = "${var.project_name}-db-subnet-group"
+  subnet_ids = [aws_subnet.public.id, aws_subnet.db.id]
+
+  tags = {
+    Name = "${var.project_name}-db-subnet-group"
+  }
+}
+
+# Database security group: only reachable from the web instance's
+# security group — never exposed to the internet.
+resource "aws_security_group" "db" {
+  name        = "${var.project_name}-db-sg"
+  description = "Allow Postgres only from the web security group"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "Postgres from web instance only"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.web.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.project_name}-db-sg"
+  }
+}

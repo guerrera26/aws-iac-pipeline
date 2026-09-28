@@ -1,0 +1,40 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  max-width: 640px;
+  margin: 4rem auto;
+  padding: 0 1.5rem;
+  line-height: 1.5;
+}
+
+h1 {
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  opacity: 0.75;
+  margin-top: 0;
+}
+
+section {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(128, 128, 128, 0.3);
+}
+
+dt {
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+dd {
+  margin-left: 0;
+}
+
+.visit-count {
+  font-size: 2.5rem;
+  font-weight: 700;
+}

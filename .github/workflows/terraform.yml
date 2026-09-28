@@ -1,4 +1,4 @@
-name: Terraform CI/CD
+name: Terraform + App CI/CD
 
 on:
   push:
@@ -10,13 +10,107 @@ permissions:
   contents: read
 
 jobs:
+  # ── 1. Run the app's test suite against a real Postgres service container.
+  #      Nothing downstream runs unless this passes. ──
+  test:
+    name: Test Flask App
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: appadmin
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: appdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: appdb
+      DB_USER: appadmin
+      DB_PASSWORD: testpassword
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: app
+        run: pip install -r requirements.txt pytest
+
+      - name: Run tests
+        working-directory: app
+        run: pytest -v
+
+  # ── 2. Run the frontend's test suite (React + TypeScript). ──
+  test-frontend:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Type-check and build
+        working-directory: frontend
+        run: npm run build
+
+  # ── 2. Static security scan of the Terraform config. Also gates deploy. ──
+  security-scan:
+    name: Terraform Security Scan (tfsec)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+
+  # ── 3. Provision/update infrastructure. Only runs if tests + scan passed. ──
   terraform:
     name: Terraform Plan / Apply
+    needs: [test, test-frontend, security-scan]
     runs-on: ubuntu-latest
 
     env:
       TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
       TF_VAR_my_ip: ${{ secrets.MY_IP }}
+
+    outputs:
+      instance_ip: ${{ steps.tf_outputs.outputs.instance_ip }}
+      security_group_id: ${{ steps.tf_outputs.outputs.security_group_id }}
+      db_host: ${{ steps.tf_outputs.outputs.db_host }}
+      db_port: ${{ steps.tf_outputs.outputs.db_port }}
+      db_name: ${{ steps.tf_outputs.outputs.db_name }}
+      db_user: ${{ steps.tf_outputs.outputs.db_user }}
+      db_password_ssm_param: ${{ steps.tf_outputs.outputs.db_password_ssm_param }}
 
     steps:
       - name: Checkout repository
@@ -45,8 +139,99 @@ jobs:
 
       - name: Terraform Plan
         run: terraform plan -no-color
-        continue-on-error: false
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve -no-color
+
+      - name: Capture Terraform outputs
+        id: tf_outputs
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "instance_ip=$(terraform output -raw instance_public_ip)" >> "$GITHUB_OUTPUT"
+          echo "security_group_id=$(terraform output -raw security_group_id)" >> "$GITHUB_OUTPUT"
+          echo "db_host=$(terraform output -raw db_host)" >> "$GITHUB_OUTPUT"
+          echo "db_port=$(terraform output -raw db_port)" >> "$GITHUB_OUTPUT"
+          echo "db_name=$(terraform output -raw db_name)" >> "$GITHUB_OUTPUT"
+          echo "db_user=$(terraform output -raw db_user)" >> "$GITHUB_OUTPUT"
+          echo "db_password_ssm_param=$(terraform output -raw db_password_ssm_param)" >> "$GITHUB_OUTPUT"
+
+  # ── 4. Deploy the app onto the instance via Ansible. Only on push to main.
+  #      The DB password never appears here — the instance fetches it itself
+  #      from SSM Parameter Store using its IAM role. ──
+  deploy:
+    name: Deploy App (Ansible)
+    needs: terraform
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    env:
+      INSTANCE_IP: ${{ needs.terraform.outputs.instance_ip }}
+      SG_ID: ${{ needs.terraform.outputs.security_group_id }}
+      DB_HOST: ${{ needs.terraform.outputs.db_host }}
+      DB_PORT: ${{ needs.terraform.outputs.db_port }}
+      DB_NAME: ${{ needs.terraform.outputs.db_name }}
+      DB_USER: ${{ needs.terraform.outputs.db_user }}
+      DB_PASSWORD_SSM_PARAM: ${{ needs.terraform.outputs.db_password_ssm_param }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Write deploy private key
+        run: |
+          echo "${{ secrets.CI_DEPLOY_PRIVATE_KEY }}" > /tmp/ci_deploy_key
+          chmod 600 /tmp/ci_deploy_key
+
+      - name: Get this runner's public IP
+        id: runner_ip
+        run: echo "ip=$(curl -s https://checkip.amazonaws.com)" >> "$GITHUB_OUTPUT"
+
+      - name: Temporarily allow this runner to SSH in
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id "$SG_ID" \
+            --protocol tcp --port 22 \
+            --cidr "${{ steps.runner_ip.outputs.ip }}/32"
+
+      - name: Run Ansible playbook
+        working-directory: ansible
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          ansible-playbook -i "${INSTANCE_IP}," \
+            --user ec2-user \
+            --private-key /tmp/ci_deploy_key \
+            --extra-vars "db_host=${DB_HOST} db_port=${DB_PORT} db_name=${DB_NAME} db_user=${DB_USER} db_password_ssm_param=${DB_PASSWORD_SSM_PARAM} aws_region=us-east-1" \
+            playbook.yml
+
+      - name: Revoke the runner's temporary SSH access
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "$SG_ID" \
+            --protocol tcp --port 22 \
+            --cidr "${{ steps.runner_ip.outputs.ip }}/32"

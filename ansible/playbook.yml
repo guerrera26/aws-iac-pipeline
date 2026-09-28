@@ -1,25 +1,111 @@
 ---
-- name: Configure web server on EC2 instance
-  hosts: web
+- name: Deploy Flask app behind nginx
+  hosts: all
   become: true
 
   vars:
-    project_name: "AWS DevOps Project"
+    app_dir: /opt/flaskapp
+    app_user: ec2-user
 
   tasks:
-    - name: Install nginx
+    - name: Install system packages
       dnf:
-        name: nginx
+        name:
+          - python3
+          - python3-pip
+          - nginx
         state: present
 
-    - name: Deploy index page from template
-      template:
-        src: templates/index.html.j2
-        dest: /usr/share/nginx/html/index.html
+    - name: Ensure app directory exists
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0755"
+
+    - name: Copy application code
+      copy:
+        src: "../app/app.py"
+        dest: "{{ app_dir }}/app.py"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
         mode: "0644"
+
+    - name: Copy requirements file
+      copy:
+        src: "../app/requirements.txt"
+        dest: "{{ app_dir }}/requirements.txt"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0644"
+
+    - name: Create Python virtual environment and install dependencies
+      pip:
+        requirements: "{{ app_dir }}/requirements.txt"
+        virtualenv: "{{ app_dir }}/venv"
+        virtualenv_command: python3 -m venv
+
+    - name: Deploy systemd unit for the Flask app (gunicorn)
+      template:
+        src: templates/flaskapp.service.j2
+        dest: /etc/systemd/system/flaskapp.service
+        mode: "0644"
+      notify: restart flaskapp
+
+    - name: Ensure frontend directory exists
+      file:
+        path: "{{ app_dir }}/frontend/dist"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0755"
+
+    - name: Deploy built frontend (React/TypeScript static bundle)
+      copy:
+        src: "../frontend/dist/"
+        dest: "{{ app_dir }}/frontend/dist/"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0644"
+      notify: restart nginx
+
+    - name: Deploy nginx reverse proxy config
+      template:
+        src: templates/nginx-flaskapp.conf.j2
+        dest: /etc/nginx/conf.d/flaskapp.conf
+        mode: "0644"
+      notify: restart nginx
+
+    - name: Remove default nginx welcome page config (avoid port conflict)
+      file:
+        path: /usr/share/nginx/html/index.html
+        state: absent
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: true
+
+    - name: Start and enable the Flask app service
+      systemd:
+        name: flaskapp
+        state: started
+        enabled: true
 
     - name: Start and enable nginx
       systemd:
         name: nginx
         state: started
         enabled: true
+
+  handlers:
+    - name: restart flaskapp
+      systemd:
+        name: flaskapp
+        state: restarted
+        daemon_reload: true
+
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted

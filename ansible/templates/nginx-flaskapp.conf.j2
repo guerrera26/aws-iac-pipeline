@@ -1,0 +1,27 @@
+server {
+    listen 80 default_server;
+    server_name _;
+
+    root {{ app_dir }}/frontend/dist;
+    index index.html;
+
+    location /health {
+        proxy_pass http://127.0.0.1:8000/health;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # React SPA: any other route falls back to index.html so client-side
+    # routing works on a hard refresh / direct link.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

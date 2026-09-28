@@ -1,0 +1,20 @@
+[Unit]
+Description=Flask demo app (gunicorn)
+After=network.target
+
+[Service]
+User={{ app_user }}
+Group={{ app_user }}
+WorkingDirectory={{ app_dir }}
+Environment=DB_HOST={{ db_host | default('') }}
+Environment=DB_PORT={{ db_port | default('5432') }}
+Environment=DB_NAME={{ db_name | default('appdb') }}
+Environment=DB_USER={{ db_user | default('appadmin') }}
+Environment=DB_PASSWORD_SSM_PARAM={{ db_password_ssm_param | default('') }}
+Environment=AWS_REGION={{ aws_region | default('us-east-1') }}
+ExecStart={{ app_dir }}/venv/bin/gunicorn --workers 2 --bind 127.0.0.1:8000 app:app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
