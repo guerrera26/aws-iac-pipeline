@@ -26,7 +26,7 @@ resource "aws_ssm_parameter" "db_password" {
 # full, not a production database.
 # Performance Insights is a production-scale monitoring feature; not
 # needed to observe a single low-traffic personal-project database.
-# tfsec:ignore:aws-rds-enable-iam-auth tfsec:ignore:aws-rds-enable-deletion-protection tfsec:ignore:aws-rds-enable-performance-insights
+# tfsec:ignore:aws-rds-enable-iam-auth tfsec:ignore:AVD-AWS-0177 tfsec:ignore:aws-rds-enable-performance-insights
 resource "aws_db_instance" "postgres" {
   identifier     = "${var.project_name}-db"
   engine         = "postgres"
