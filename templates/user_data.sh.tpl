@@ -1,4 +1,6 @@
 #!/bin/bash
+# v2: forced replacement via user_data_replace_on_change, since
+# cloud-init only ever runs user-data once per instance ID.
 set -e
 exec > /var/log/ci-key-setup.log 2>&1
 echo "ci-key-setup running at $(date)"
