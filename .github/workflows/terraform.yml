@@ -92,13 +92,6 @@ jobs:
 
       - name: Run tfsec
         uses: aquasecurity/tfsec-action@v1.0.3
-        with:
-          # AVD-AWS-0177 (RDS deletion protection) is a documented, intentional
-          # accepted risk for this learning project (see database.tf and the
-          # README's "Accepted-risk findings" table) — excluded here because
-          # this Rego-based check isn't reliably suppressed by an inline
-          # tfsec:ignore comment in this tfsec version.
-          additional_args: --exclude AVD-AWS-0177
 
   # ── 3. Provision/update infrastructure. Only runs if tests + scan passed. ──
   terraform:

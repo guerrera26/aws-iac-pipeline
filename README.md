@@ -135,7 +135,8 @@ Pull requests run stages 1–4 only (plan, not apply), so infrastructure changes
 - **Static security scanning**: tfsec runs on every push and blocks the pipeline on new findings, catching misconfigurations before they reach AWS rather than after.
 - **IMDSv2 enforced** on the EC2 instance, mitigating SSRF-based credential theft.
 - **Remote state (S3 + DynamoDB)**: keeps local and CI runs consistent and prevents concurrent-apply conflicts.
-- **Free-tier sizing** (`t3.micro` / `db.t3.micro` / on-demand DynamoDB) — appropriate for a learning project; a production version would add Multi-AZ RDS, deletion protection, and final snapshots on destroy.
+- **Free-tier sizing** (`t3.micro` / `db.t3.micro` / on-demand DynamoDB) — appropriate for a learning project; a production version would add Multi-AZ RDS and final snapshots on destroy.
+- **RDS deletion protection is on**, like a real production database — teardown is a deliberate two-step process rather than a single accidental command (see Teardown below).
 
 ### Accepted-risk findings (documented, not silently suppressed)
 
@@ -149,13 +150,19 @@ tfsec flags a few things that are intentional tradeoffs for a free-tier personal
 | S3 bucket uses SSE-S3 instead of a customer-managed KMS key | AES256 is sufficient for this bucket's contents (Terraform state); a CMK adds cost/rotation overhead without a matching benefit here |
 | No S3 access logging | Disproportionate complexity for a bucket that's already fully blocked from public access |
 | RDS doesn't use IAM database authentication | Would require reworking the app's connection code to fetch short-lived auth tokens instead of a password — a real improvement, just out of scope for this pass |
-| RDS deletion protection is off | Intentional: this needs to stay a one-command `terraform destroy`, not a production database |
 | RDS Performance Insights is off | A production-scale monitoring feature this single low-traffic instance doesn't need |
 | DynamoDB lock table uses the AWS-owned key, not a customer-managed one | The table only ever holds lock-id metadata, never application data |
 
 ## Teardown
 
+RDS deletion protection is on, so destroying is a deliberate two-step process:
+
 ```
+# 1. Turn off deletion protection: flip deletion_protection to false
+#    in database.tf, then apply that one change
+terraform apply
+
+# 2. Then destroy everything
 terraform destroy
 ```
 Removes all AWS resources except the S3 state bucket/DynamoDB table, which need a second `destroy` pass or manual cleanup since Terraform can't delete the backend it's actively using in the same run.

@@ -21,13 +21,9 @@ resource "aws_ssm_parameter" "db_password" {
 # code to fetch a short-lived auth token instead of a password; noted as a
 # real future improvement, not implemented here given the time-boxed scope
 # of this project.
-# Deletion protection is intentionally left off: this is a personal/
-# learning environment that needs to be easy to `terraform destroy` in
-# full, not a production database.
 # Performance Insights is a production-scale monitoring feature; not
 # needed to observe a single low-traffic personal-project database.
 # tfsec:ignore:aws-rds-enable-iam-auth
-# tfsec:ignore:AVD-AWS-0177
 # tfsec:ignore:aws-rds-enable-performance-insights
 resource "aws_db_instance" "postgres" {
   identifier     = "${var.project_name}-db"
@@ -52,10 +48,11 @@ resource "aws_db_instance" "postgres" {
   # real, worthwhile safeguard even for a learning project).
   backup_retention_period = 7
 
-  # Learning-project settings — a production database would keep
-  # deletion protection on and take a final snapshot.
+  # Deletion protection on, like a real production database. Teardown is a
+  # deliberate two-step process (see README): disable protection, then
+  # destroy — not something that happens by accident.
   skip_final_snapshot = true
-  deletion_protection = false
+  deletion_protection = true
   multi_az            = false
 
   tags = {
