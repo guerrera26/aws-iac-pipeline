@@ -13,7 +13,7 @@
 
 A full-stack infrastructure-as-code pipeline: **Terraform** provisions AWS infrastructure — networking, a web server, and a private Postgres database — **Ansible** deploys a **React/TypeScript** frontend and a **Flask** backend onto it, and every deploy is gated by a real test suite and a security scan, all automated through **GitHub Actions**.
 
-**Live demo:** http://ec2-32-198-46-10.compute-1.amazonaws.com *(a personal-project instance — if it's ever down, see the screenshots/architecture below, or spin it back up with `terraform apply`)*
+**Live demo:** http://ec2-3-239-199-217.compute-1.amazonaws.com *(a personal-project instance — if it's ever down, or the address has drifted since this was last updated, see the architecture below, or check `terraform output instance_public_dns` for the current address)*
 
 ## Contents
 
