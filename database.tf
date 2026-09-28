@@ -43,10 +43,13 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids = [aws_security_group.db.id]
   publicly_accessible    = false
 
-  # Keep a week of automated backups (RDS backup storage up to the size of
-  # the database is included free, so this costs nothing extra and is a
-  # real, worthwhile safeguard even for a learning project).
-  backup_retention_period = 7
+  # AWS caps backup retention at 1 day for free-tier-restricted accounts
+  # (confirmed directly: applying anything higher fails with
+  # FreeTierRestrictionError) — 1 day is the real ceiling here, not a
+  # choice. tfsec still flags this as "very low"; documented as an
+  # accepted, account-enforced constraint rather than silently ignored.
+  # tfsec:ignore:aws-rds-specify-backup-retention
+  backup_retention_period = 1
 
   # Deletion protection on, like a real production database. Teardown is a
   # deliberate two-step process (see README): disable protection, then

@@ -150,6 +150,7 @@ tfsec flags a few things that are intentional tradeoffs for a free-tier personal
 | S3 bucket uses SSE-S3 instead of a customer-managed KMS key | AES256 is sufficient for this bucket's contents (Terraform state); a CMK adds cost/rotation overhead without a matching benefit here |
 | No S3 access logging | Disproportionate complexity for a bucket that's already fully blocked from public access |
 | RDS doesn't use IAM database authentication | Would require reworking the app's connection code to fetch short-lived auth tokens instead of a password — a real improvement, just out of scope for this pass |
+| RDS backup retention is only 1 day | Not a choice — this AWS account is free-tier restricted, and `terraform apply` with a longer retention period fails outright with `FreeTierRestrictionError`. 1 day is the actual ceiling. |
 | RDS Performance Insights is off | A production-scale monitoring feature this single low-traffic instance doesn't need |
 | DynamoDB lock table uses the AWS-owned key, not a customer-managed one | The table only ever holds lock-id metadata, never application data |
 
