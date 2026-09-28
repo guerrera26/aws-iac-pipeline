@@ -2,10 +2,11 @@ resource "random_id" "bucket_suffix" {
   byte_length = 4
 }
 
-# tfsec:ignore:aws-s3-enable-bucket-logging -- access logging would add
-# another bucket and ongoing storage cost that's disproportionate to this
-# bucket's actual risk (it only holds Terraform-related project artifacts,
-# fully blocked from public access below).
+# Access logging would add another bucket and ongoing storage cost that's
+# disproportionate to this bucket's actual risk (it only holds
+# Terraform-related project artifacts, fully blocked from public access
+# below).
+# tfsec:ignore:aws-s3-enable-bucket-logging
 resource "aws_s3_bucket" "project_bucket" {
   bucket = "${var.project_name}-${random_id.bucket_suffix.hex}"
 
@@ -31,9 +32,9 @@ resource "aws_s3_bucket_versioning" "project_bucket" {
   }
 }
 
-# tfsec:ignore:aws-s3-encryption-customer-key -- SSE-S3 (AES256) is
-# sufficient here; a customer-managed KMS key adds cost and rotation
-# overhead this project's data doesn't need.
+# SSE-S3 (AES256) is sufficient here; a customer-managed KMS key adds cost
+# and rotation overhead this project's data doesn't need.
+# tfsec:ignore:aws-s3-encryption-customer-key
 resource "aws_s3_bucket_server_side_encryption_configuration" "project_bucket" {
   bucket = aws_s3_bucket.project_bucket.id
 

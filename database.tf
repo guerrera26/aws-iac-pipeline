@@ -17,16 +17,16 @@ resource "aws_ssm_parameter" "db_password" {
   }
 }
 
-# tfsec:ignore:aws-rds-enable-iam-auth -- IAM database authentication
-# would require reworking the app's connection code to fetch a short-lived
-# auth token instead of a password; noted as a real future improvement,
-# not implemented here given the time-boxed scope of this project.
-# tfsec:ignore:aws-rds-enable-deletion-protection -- intentionally left
-# off: this is a personal/learning environment that needs to be easy to
-# `terraform destroy` in full, not a production database.
-# tfsec:ignore:aws-rds-enable-performance-insights -- Performance Insights
-# is a production-scale monitoring feature; not needed to observe a single
-# low-traffic personal-project database.
+# IAM database authentication would require reworking the app's connection
+# code to fetch a short-lived auth token instead of a password; noted as a
+# real future improvement, not implemented here given the time-boxed scope
+# of this project.
+# Deletion protection is intentionally left off: this is a personal/
+# learning environment that needs to be easy to `terraform destroy` in
+# full, not a production database.
+# Performance Insights is a production-scale monitoring feature; not
+# needed to observe a single low-traffic personal-project database.
+# tfsec:ignore:aws-rds-enable-iam-auth tfsec:ignore:aws-rds-enable-deletion-protection tfsec:ignore:aws-rds-enable-performance-insights
 resource "aws_db_instance" "postgres" {
   identifier     = "${var.project_name}-db"
   engine         = "postgres"
@@ -45,9 +45,10 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids = [aws_security_group.db.id]
   publicly_accessible    = false
 
-  # Keep at least one day of automated backups (free-tier eligible, and a
+  # Keep a week of automated backups (RDS backup storage up to the size of
+  # the database is included free, so this costs nothing extra and is a
   # real, worthwhile safeguard even for a learning project).
-  backup_retention_period = 1
+  backup_retention_period = 7
 
   # Learning-project settings — a production database would keep
   # deletion protection on and take a final snapshot.

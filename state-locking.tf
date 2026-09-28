@@ -1,6 +1,6 @@
-# tfsec:ignore:aws-dynamodb-table-customer-key -- the AWS-owned default
-# key is sufficient for a lock table that only ever holds lock-id metadata,
-# never application data.
+# The AWS-owned default key is sufficient for a lock table that only ever
+# holds lock-id metadata, never application data.
+# tfsec:ignore:aws-dynamodb-table-customer-key
 resource "aws_dynamodb_table" "terraform_locks" {
   name         = "${var.project_name}-tf-locks"
   billing_mode = "PAY_PER_REQUEST"
