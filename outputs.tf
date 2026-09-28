@@ -47,3 +47,8 @@ output "db_password_ssm_param" {
   description = "SSM Parameter Store name holding the DB password (the app fetches it via IAM role at runtime)"
   value       = aws_ssm_parameter.db_password.name
 }
+
+output "instance_public_dns" {
+  description = "Auto-assigned AWS public DNS hostname for the instance"
+  value       = aws_instance.web.public_dns
+}
