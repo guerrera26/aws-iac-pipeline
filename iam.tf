@@ -13,8 +13,15 @@ resource "aws_iam_role" "ec2_role" {
   assume_role_policy = data.aws_iam_policy_document.ec2_assume_role.json
 }
 
+# Resolve the AWS-managed SSM KMS key's real key ARN from its alias —
+# IAM policies must reference the key ARN itself, not the alias ARN.
+data "aws_kms_alias" "ssm" {
+  name = "alias/aws/ssm"
+}
+
 # Least-privilege: this role can only read the one SSM parameter holding
-# the DB password, and only decrypt it with the default SSM/KMS key.
+# the DB password, and only decrypt it with the specific SSM KMS key
+# (scoped to that key's ARN, not a wildcard).
 data "aws_iam_policy_document" "read_db_password" {
   statement {
     actions   = ["ssm:GetParameter"]
@@ -22,7 +29,7 @@ data "aws_iam_policy_document" "read_db_password" {
   }
   statement {
     actions   = ["kms:Decrypt"]
-    resources = ["*"]
+    resources = [data.aws_kms_alias.ssm.target_key_arn]
     condition {
       test     = "StringEquals"
       variable = "kms:ViaService"

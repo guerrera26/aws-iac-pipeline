@@ -2,6 +2,9 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+# tfsec:ignore:aws-ec2-require-vpc-flow-logs-for-all-vpcs -- flow logs add
+# ongoing CloudWatch/S3 cost and operational noise that isn't warranted for
+# a single-instance personal project; would add this for a production VPC.
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
@@ -12,6 +15,10 @@ resource "aws_vpc" "main" {
   }
 }
 
+# tfsec:ignore:aws-ec2-no-public-ip-subnet -- intentional: no NAT gateway
+# in this project (NAT gateways cost money around the clock even when
+# idle, which doesn't make sense for a single free-tier learning instance),
+# so the web instance needs a public IP to reach the internet directly.
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
@@ -62,6 +69,9 @@ resource "aws_security_group" "web" {
     cidr_blocks = [var.my_ip]
   }
 
+  # tfsec:ignore:aws-ec2-no-public-ingress-sgr -- intentional: this is a
+  # public-facing web app on a single free-tier instance with no load
+  # balancer, so port 80 has to be open to the internet.
   ingress {
     description = "HTTP from anywhere (for later web-server demo)"
     from_port   = 80
@@ -70,7 +80,11 @@ resource "aws_security_group" "web" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # tfsec:ignore:aws-ec2-no-public-egress-sgr -- intentional: the instance
+  # needs outbound internet access for OS/package updates, pulling the app
+  # from git, and calling AWS APIs (SSM, etc.) via the public endpoints.
   egress {
+    description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -118,11 +132,14 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.web.id]
   }
 
+  # Egress narrowed to the VPC itself — the database never needs to reach
+  # the public internet.
   egress {
+    description = "Allow outbound traffic within the VPC only"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [aws_vpc.main.cidr_block]
   }
 
   tags = {

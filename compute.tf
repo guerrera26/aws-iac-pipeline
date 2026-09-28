@@ -32,6 +32,11 @@ resource "aws_instance" "web" {
     http_endpoint = "enabled"
   }
 
+  # Encrypt the root volume at rest
+  root_block_device {
+    encrypted = true
+  }
+
   tags = {
     Name = "${var.project_name}-web"
   }
