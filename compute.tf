@@ -29,25 +29,14 @@ resource "aws_instance" "web" {
   # Appends the CI deploy key to ec2-user's authorized_keys at every boot.
   # This runs via cloud-init on first boot, so the CI key survives any
   # future instance replacement automatically — no manual SSH step needed
-  # ever again (that manual step is what broke the last deploy).
-  user_data = <<-EOF
-    #!/bin/bash
-    set -e
-    exec > /var/log/ci-key-setup.log 2>&1
-    echo "ci-key-setup running at $(date)"
-    mkdir -p /home/ec2-user/.ssh
-    chmod 700 /home/ec2-user/.ssh
-    CI_KEY='${var.ci_ssh_public_key}'
-    if [ -n "$CI_KEY" ]; then
-      echo "CI_KEY is non-empty (length: $${#CI_KEY} chars) - appending to authorized_keys"
-      echo "$CI_KEY" >> /home/ec2-user/.ssh/authorized_keys
-      chown ec2-user:ec2-user /home/ec2-user/.ssh/authorized_keys
-      chmod 600 /home/ec2-user/.ssh/authorized_keys
-      echo "Done. authorized_keys now has $(wc -l < /home/ec2-user/.ssh/authorized_keys) line(s)"
-    else
-      echo "CI_KEY is EMPTY - var.ci_ssh_public_key was not passed in, skipping"
-    fi
-  EOF
+  # ever again (that manual step is what broke an earlier deploy). Loaded
+  # from a template file rather than an inline heredoc: Terraform's <<-
+  # heredoc marker only strips leading TABS, not spaces, so a space-indented
+  # inline heredoc silently corrupts the shebang line and cloud-init drops
+  # the whole script without any error.
+  user_data = templatefile("${path.module}/templates/user_data.sh.tpl", {
+    ci_ssh_public_key = var.ci_ssh_public_key
+  })
 
   # Enforce IMDSv2 (mitigates SSRF-based credential theft)
   metadata_options {
