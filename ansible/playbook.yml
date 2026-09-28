@@ -31,6 +31,7 @@
         owner: "{{ app_user }}"
         group: "{{ app_user }}"
         mode: "0644"
+      notify: restart flaskapp
 
     - name: Copy requirements file
       copy:
@@ -39,12 +40,14 @@
         owner: "{{ app_user }}"
         group: "{{ app_user }}"
         mode: "0644"
+      notify: restart flaskapp
 
     - name: Create Python virtual environment and install dependencies
       pip:
         requirements: "{{ app_dir }}/requirements.txt"
         virtualenv: "{{ app_dir }}/venv"
         virtualenv_command: python3 -m venv
+      notify: restart flaskapp
 
     - name: Deploy systemd unit for the Flask app (gunicorn)
       template:
