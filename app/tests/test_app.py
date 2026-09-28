@@ -82,3 +82,49 @@ def test_visits_increments_with_real_db(client, db_available):
     first = client.get("/api/visits").get_json()["visits"]
     second = client.get("/api/visits").get_json()["visits"]
     assert second == first + 1
+
+
+def test_visits_summary_without_db_returns_503(client, monkeypatch):
+    monkeypatch.delenv("DB_HOST", raising=False)
+    response = client.get("/api/visits/summary")
+    assert response.status_code == 503
+
+
+def test_visits_summary_returns_expected_shape(client, db_available):
+    # Make sure at least one visit exists to summarize
+    client.get("/api/visits")
+
+    response = client.get("/api/visits/summary")
+    assert response.status_code == 200
+    data = response.get_json()
+
+    assert "total" in data
+    assert "last_24h" in data
+    assert "hourly" in data
+    assert data["total"] >= 1
+    assert data["last_24h"] >= 1
+
+
+def test_visits_summary_hourly_has_24_buckets_in_order(client, db_available):
+    response = client.get("/api/visits/summary")
+    data = response.get_json()
+
+    hourly = data["hourly"]
+    assert len(hourly) == 24
+    for bucket in hourly:
+        assert "hour" in bucket
+        assert "count" in bucket
+        assert bucket["count"] >= 0
+
+    # Every hour label should be a valid "HH:00" format
+    hours = [int(b["hour"].split(":")[0]) for b in hourly]
+    assert all(0 <= h <= 23 for h in hours)
+    assert all(b["hour"].endswith(":00") for b in hourly)
+
+
+def test_visits_summary_last_24h_matches_sum_of_hourly(client, db_available):
+    client.get("/api/visits")
+    response = client.get("/api/visits/summary")
+    data = response.get_json()
+
+    assert data["last_24h"] == sum(b["count"] for b in data["hourly"])

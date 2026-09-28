@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { StatusResponse, VisitsResponse } from "./types";
+import type { StatusResponse, VisitsResponse, VisitsSummaryResponse } from "./types";
 
 type LoadState<T> =
   | { kind: "loading" }
@@ -56,6 +56,73 @@ function VisitsPanel() {
   return <p className="visit-count">{state.data.visits}</p>;
 }
 
+/** Minimal hand-rolled SVG bar chart — no charting library needed for a
+ * 24-bar sparkline, and it keeps the bundle small. */
+function HourlyBarChart({ data }: { data: VisitsSummaryResponse["hourly"] }) {
+  const max = Math.max(1, ...data.map((d) => d.count));
+  const barWidth = 100 / data.length;
+
+  return (
+    <svg
+      viewBox="0 0 100 40"
+      preserveAspectRatio="none"
+      className="hourly-chart"
+      role="img"
+      aria-label="Visits per hour over the last 24 hours"
+    >
+      {data.map((bucket, i) => {
+        const height = (bucket.count / max) * 36;
+        return (
+          <rect
+            key={bucket.hour + i}
+            x={i * barWidth + 0.5}
+            y={40 - height}
+            width={Math.max(0, barWidth - 1)}
+            height={height}
+          >
+            <title>
+              {bucket.hour} — {bucket.count} visit{bucket.count === 1 ? "" : "s"}
+            </title>
+          </rect>
+        );
+      })}
+    </svg>
+  );
+}
+
+function AnalyticsPanel() {
+  const [state, setState] = useState<LoadState<VisitsSummaryResponse>>({ kind: "loading" });
+
+  useEffect(() => {
+    fetchJson<VisitsSummaryResponse>("/api/visits/summary")
+      .then((data) => setState({ kind: "loaded", data }))
+      .catch((err: Error) => setState({ kind: "error", message: err.message }));
+  }, []);
+
+  if (state.kind === "loading") return <p>Loading analytics…</p>;
+  if (state.kind === "error") return <p role="alert">Analytics unavailable: {state.message}</p>;
+
+  const { total, last_24h, hourly } = state.data;
+  const first = hourly[0];
+  const last = hourly[hourly.length - 1];
+
+  return (
+    <div>
+      <dl className="analytics-summary">
+        <dt>Total visits</dt>
+        <dd>{total}</dd>
+        <dt>Last 24 hours</dt>
+        <dd>{last_24h}</dd>
+      </dl>
+      <HourlyBarChart data={hourly} />
+      <div className="chart-labels">
+        <span>{first.hour}</span>
+        <span>{last.hour}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <main>
@@ -74,6 +141,15 @@ export default function App() {
       <section>
         <h2>Visit counter (Postgres-backed)</h2>
         <VisitsPanel />
+      </section>
+
+      <section>
+        <h2>Visit analytics</h2>
+        <p className="section-note">
+          Aggregated with a <code>GROUP BY date_trunc('hour', ...)</code> query against the same
+          visits table — a small example of the app doing real data work, not just CRUD.
+        </p>
+        <AnalyticsPanel />
       </section>
     </main>
   );

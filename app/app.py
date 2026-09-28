@@ -1,7 +1,7 @@
 import os
 import platform
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import psycopg2
 from flask import Flask, jsonify
@@ -89,11 +89,58 @@ def visits():
         conn.close()
 
 
+@app.route("/api/visits/summary")
+def visits_summary():
+    """Analytics endpoint: total visits, visits in the last 24h, and an
+    hourly time series for the last 24 hours (zero-filled for hours with
+    no traffic) — the aggregation query behind the frontend's chart."""
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify(error="database not configured"), 503
+
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM visits")
+                total = cur.fetchone()[0]
+
+                cur.execute(
+                    """
+                    SELECT date_trunc('hour', visited_at) AS hour, COUNT(*)
+                    FROM visits
+                    WHERE visited_at >= now() - interval '24 hours'
+                    GROUP BY hour
+                    ORDER BY hour
+                    """
+                )
+                rows = cur.fetchall()
+
+        counts_by_hour = {hour.replace(minute=0, second=0, microsecond=0): count for hour, count in rows}
+
+        now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        hourly = []
+        for i in range(23, -1, -1):
+            bucket = now - timedelta(hours=i)
+            # counts_by_hour keys come back tz-aware from Postgres; compare on the naive
+            # hour value since psycopg2 may return either depending on session tz config
+            count = next(
+                (c for h, c in counts_by_hour.items() if h.replace(tzinfo=None) == bucket.replace(tzinfo=None)),
+                0,
+            )
+            hourly.append({"hour": bucket.strftime("%H:00"), "count": count})
+
+        last_24h = sum(h["count"] for h in hourly)
+
+        return jsonify(total=total, last_24h=last_24h, hourly=hourly), 200
+    finally:
+        conn.close()
+
+
 @app.route("/")
 def index():
     return jsonify(
         message="AWS IaC Pipeline demo app",
-        endpoints=["/health", "/api/status", "/api/visits"],
+        endpoints=["/health", "/api/status", "/api/visits", "/api/visits/summary"],
     ), 200
 
 
