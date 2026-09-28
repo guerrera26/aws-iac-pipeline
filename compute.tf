@@ -26,6 +26,23 @@ resource "aws_instance" "web" {
   key_name               = aws_key_pair.deployer.key_name
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
 
+  # Appends the CI deploy key to ec2-user's authorized_keys at every boot.
+  # This runs via cloud-init on first boot, so the CI key survives any
+  # future instance replacement automatically — no manual SSH step needed
+  # ever again (that manual step is what broke the last deploy).
+  user_data = <<-EOF
+    #!/bin/bash
+    set -e
+    mkdir -p /home/ec2-user/.ssh
+    chmod 700 /home/ec2-user/.ssh
+    CI_KEY='${var.ci_ssh_public_key}'
+    if [ -n "$CI_KEY" ]; then
+      echo "$CI_KEY" >> /home/ec2-user/.ssh/authorized_keys
+      chown ec2-user:ec2-user /home/ec2-user/.ssh/authorized_keys
+      chmod 600 /home/ec2-user/.ssh/authorized_keys
+    fi
+  EOF
+
   # Enforce IMDSv2 (mitigates SSRF-based credential theft)
   metadata_options {
     http_tokens   = "required"

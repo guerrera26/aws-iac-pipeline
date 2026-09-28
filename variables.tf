@@ -25,3 +25,9 @@ variable "my_ip" {
   description = "Your public IP in CIDR notation, e.g. 71.23.45.6/32 — restricts SSH to just you"
   type        = string
 }
+
+variable "ci_ssh_public_key" {
+  description = "Public half of the GitHub Actions deploy key. Baked into the instance's user_data (not the AWS key pair) so it's appended to authorized_keys on every boot — meaning it survives instance replacement automatically, unlike a one-off manual SSH step. Optional: left empty for local-only applies."
+  type        = string
+  default     = ""
+}

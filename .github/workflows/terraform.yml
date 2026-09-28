@@ -102,6 +102,7 @@ jobs:
     env:
       TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
       TF_VAR_my_ip: ${{ secrets.MY_IP }}
+      TF_VAR_ci_ssh_public_key: ${{ vars.CI_SSH_PUBLIC_KEY }}
 
     outputs:
       instance_ip: ${{ steps.tf_outputs.outputs.instance_ip }}
