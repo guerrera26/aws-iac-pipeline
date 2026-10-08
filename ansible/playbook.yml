@@ -26,11 +26,14 @@
 
     - name: Copy application code
       copy:
-        src: "../app/app.py"
-        dest: "{{ app_dir }}/app.py"
+        src: "../app/{{ item }}"
+        dest: "{{ app_dir }}/{{ item }}"
         owner: "{{ app_user }}"
         group: "{{ app_user }}"
         mode: "0644"
+      loop:
+        - app.py
+        - cleaner.py
       notify: restart flaskapp
 
     - name: Copy requirements file
