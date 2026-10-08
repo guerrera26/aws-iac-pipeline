@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import DataCleaner from "./DataCleaner";
 import type { StatusResponse, VisitsResponse, VisitsSummaryResponse } from "./types";
 
 type LoadState<T> =
@@ -132,6 +133,11 @@ export default function App() {
         Actions — this page is a React + TypeScript frontend talking to a Flask API backed by
         Postgres.
       </p>
+
+      <section>
+        <h2>Data cleaning tool (pandas)</h2>
+        <DataCleaner />
+      </section>
 
       <section>
         <h2>Backend status</h2>

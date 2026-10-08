@@ -12,6 +12,10 @@ server {
     }
 
     location /api/ {
+        # nginx rejects request bodies over 1 MB by default, which would break CSV
+        # uploads. The Flask app enforces its own 2 MB cap (and returns JSON for it);
+        # this is set just above that so the app's error is the one users see.
+        client_max_body_size 3m;
         proxy_pass http://127.0.0.1:8000/api/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

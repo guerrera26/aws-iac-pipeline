@@ -4,11 +4,20 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import psycopg2
-from flask import Flask, jsonify
+from flask import Flask, Response, jsonify, request
+from werkzeug.utils import secure_filename
+
+import cleaner
 
 app = Flask(__name__)
 
-APP_VERSION = "1.1.0"
+# Upload cap for the data-cleaning demo. nginx's client_max_body_size is set a
+# little higher (ansible/templates/nginx-flaskapp.conf.j2) so oversized uploads
+# get this app's JSON error rather than an nginx HTML error page.
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
+
+APP_VERSION = "1.2.0"
 START_TIME = time.time()
 
 
@@ -136,11 +145,51 @@ def visits_summary():
         conn.close()
 
 
+@app.errorhandler(413)
+def upload_too_large(_error):
+    return jsonify(error=f"file too large (the limit is {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)"), 413
+
+
+@app.route("/api/clean/sample")
+def clean_sample():
+    """A deliberately messy CSV so visitors can try the cleaner without uploading anything."""
+    return Response(cleaner.SAMPLE_CSV, mimetype="text/csv")
+
+
+@app.route("/api/clean", methods=["POST"])
+def clean():
+    """Data-cleaning demo: upload a CSV (multipart field 'file', optional JSON field
+    'options') and get back a report of what was fixed, a before/after preview, and
+    the cleaned CSV. Stateless — the file is processed in memory and is never
+    written to disk or to the database."""
+    upload = request.files.get("file")
+    if upload is None or not upload.filename:
+        return jsonify(error="no file uploaded (send a CSV as the multipart field 'file')"), 400
+
+    try:
+        options = cleaner.parse_options(request.form.get("options"))
+        result = cleaner.clean_csv(cleaner.decode_bytes(upload.read()), options)
+    except cleaner.CleanerError as exc:
+        return jsonify(error=str(exc)), 422
+
+    safe_name = secure_filename(upload.filename) or "data.csv"
+    result["filename"] = safe_name
+    result["cleaned_filename"] = f"{os.path.splitext(safe_name)[0]}_cleaned.csv"
+    return jsonify(result), 200
+
+
 @app.route("/")
 def index():
     return jsonify(
         message="AWS IaC Pipeline demo app",
-        endpoints=["/health", "/api/status", "/api/visits", "/api/visits/summary"],
+        endpoints=[
+            "/health",
+            "/api/status",
+            "/api/visits",
+            "/api/visits/summary",
+            "/api/clean",
+            "/api/clean/sample",
+        ],
     ), 200
 
 
